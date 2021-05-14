@@ -1,0 +1,722 @@
+---
+title: "Final Project"
+author: "Irem TANRIVERDI"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### OUTLINE
+
+
+
+- Problem Description
+- Data Description
+- Explanatory Data analysis
+- Model Building 
+- Model Selection
+
+
+
+### 1. Problem Description
+
+
+
+ABC Bank wants to sell it's term deposit product to customers and before launching the product they want to develop a model which help them in understanding whether a particular customer will buy their product or not (based on customer's past interaction with bank or other Financial Institution).
+
+
+
+
+
+
+### 2. Data understanding
+
+```{r , message=F, warning=F, echo=F}
+library(kableExtra)
+bank<- read.csv(file = "bank-full.csv", head = T, sep=";")
+head(bank)
+```
+
+
+```{r , message=F, warning=F, echo=F}
+bank$job<-as.factor(bank$job)
+bank$marital<-as.factor(bank$marital)
+bank$education<-as.factor(bank$education)
+bank$default<-as.factor(bank$default)
+bank$housing<-as.factor(bank$housing)
+
+bank$loan<-as.factor(bank$loan)
+bank$contact<-as.factor(bank$contact)
+bank$poutcome<-as.factor(bank$poutcome)
+#bank$ y<-as.factor(bank$ y)
+```
+
+```{r , message=F, warning=F, echo=F}
+dim(bank)
+summary(bank)
+```
+
+```{r , message=F, warning=F, echo=F}
+str(bank)
+```
+
+
+
+- Bank dataset includes 45211 observations and 17 variable.
+- There are 7 numeric variables which are age, balance, day, duration, campaign, pdays, and previous.
+- There are 10 categorical variables which are job, martial, education, default, housing, loan, contact, month, poutcome and y.
+
+
+- 1. age (numeric)
+- 2. job : type of job (categorical: 'admin.','blue-collar','entrepreneur','housemaid','management','retired','self-employed','services','student','technician','unemployed','unknown')
+- 3. marital : marital status (categorical: 'divorced','married','single','unknown'; note: 'divorced' means divorced or widowed)
+- 4. education (categorical: 'basic.4y','basic.6y','basic.9y','high.school','illiterate','professional.course','university.degree','unknown')
+- 5. default: has credit in default? (categorical: 'no','yes','unknown')
+- 6. housing: has housing loan? (categorical: 'no','yes','unknown')
+- 7. loan: has personal loan? (categorical: 'no','yes','unknown')
+related with the last contact of the current campaign:
+- 8. contact: contact communication type (categorical: 'cellular','telephone')
+- 9. month: last contact month of year (categorical: 'jan', 'feb', 'mar', ..., 'nov', 'dec')
+- 10. day_of_week: last contact day of the week (categorical: 'mon','tue','wed','thu','fri')
+- 11. duration: last contact duration, in seconds (numeric)
+- 12. campaign: number of contacts performed during this campaign and for this client (numeric, includes last contact)
+- 13. pdays: number of days that passed by after the client was last contacted from a previous campaign (numeric; 999 means client was not previously contacted)
+- 14. previous: number of contacts performed before this campaign and for this client (numeric)
+- 15. poutcome: outcome of the previous marketing campaign (categorical: 'failure','nonexistent','success’)
+
+Output variable (desired target):
+- 17. y :has the client subscribed a term deposit? (binary: 'yes','no')
+
+
+
+### Exploratory data Analysis
+
+
+
+#### Is there duplicated rows in the data?
+
+```{r , message=F, warning=F, echo=F}
+library(dplyr)
+# get the row numbers of duplicated rows
+duplicated_rows <- data_frame(duplicated = duplicated(bank), row = 1:nrow(bank)) %>%
+    filter(duplicated == T)
+
+count(duplicated_rows)
+```
+
+
+- As seen there is not duplicated rows in the data.
+
+
+
+#### Is there any missing value in the data?
+
+```{r , message=F, warning=F, echo=F}
+library(naniar)
+vis_miss(bank)
+```
+
+- As seen there is no missing value in the data.
+
+
+
+#### Frequencies of the categorical variables and distributions of the numeric variables
+
+
+```{r , message=F, warning=F, echo=F}
+library(funModeling)
+profiling_num(bank) 
+plot_num(bank) 
+freq(bank) 
+```
+
+
+
+#### Does numeric variables have any outlier and what will be shape of the variables exclude the outliers?
+
+```{r , message=F, warning=F, echo=F}
+num<-bank[,c(1,6,12:13)]
+dlookr::plot_outlier(num)
+```
+
+- As seen all of the 4 numeric variables have outlier.
+- Shapes of the variables changed when outliers removed.
+
+
+
+#### Is there any significant relationship between numeric variables and y, if y taken as numeric (1:no, 0:yes)?
+
+```{r , message=F, warning=F, output=F, echo=F}
+for(i in 1: nrow(bank)){
+  if(bank$y[i]=="yes"){
+    bank$y[i]=1
+  }
+  else{
+   bank$y[i]=0 
+  }
+}
+
+bank$y<-as.numeric(bank$y)
+```
+
+```{r , message=F, warning=F, echo=F}
+# correlations as taking y numeric( 0 and 1)
+library(corrplot)
+library(PerformanceAnalytics)
+
+numeric<-bank[,c(1,6,12:15,17)]
+
+M <- cor(numeric[,])
+res1 <- cor(M, method="spearman")
+corrplot::corrplot(res1, method= "color", order = "hclust", addCoef.col = "black", 
+         tl.col="black", tl.srt=45
+)
+```
+
+
+Positive correlations are shown in blue and negative correlations in red color. Color intensity is proportional to the correlation coefficients. Lets look at the correlation matrix to examine which variables have strong relationship with response variable y.
+
+- Between y and duration, there is strong positive relationship.
+- Between y and campaign, there is strong negative relationship.
+
+
+
+We can also see the relationship between other variables (covariates).
+
+
+
+```{r , message=F, warning=F, echo=F}
+library(GGally)
+ggpairs(numeric)
+```
+
+
+
+We can see from this plot we can see that if the relationship between variables significant or not. We can see that all of the relationship between covariates and y are significant.
+
+
+
+
+#### Is there any significant relationship between categorical variables and y?
+
+$$
+H_0: There\ is\  not\ significant\ relationship\ between\ variables\ (Variables\ are\ independent)
+$$
+```{r , message=F, warning=F, echo=F, output=F}
+library(kableExtra)
+bank<- read.csv(file = "bank-full.csv", head = T, sep=";")
+```
+
+
+```{r , message=F, warning=F, echo=F, output=F}
+bank$job<-as.factor(bank$job)
+bank$marital<-as.factor(bank$marital)
+bank$education<-as.factor(bank$education)
+bank$default<-as.factor(bank$default)
+bank$housing<-as.factor(bank$housing)
+
+bank$loan<-as.factor(bank$loan)
+bank$contact<-as.factor(bank$contact)
+bank$poutcome<-as.factor(bank$poutcome)
+#bank$ y<-as.factor(bank$ y)
+```
+
+```{r, message=F, warning=F, echo=F}
+yes<- bank[bank$y=="yes",]
+no<- bank[bank$y=="no",]
+
+
+y<-yes %>% 
+  select(job, y) %>%  
+  group_by(job) %>% 
+  summarise(n = n())
+
+n<-no %>% 
+  select(job, y) %>%  
+  group_by(job) %>% 
+  summarise(n = n())
+
+
+No<-cbind(n,subscribed=rep("No",12))
+Yes<-cbind(y,subscribed=rep("Yes",12))
+job<-rbind(No,Yes)
+
+library(ggplot2)
+a<-ggplot(data=job, aes(x=job, y=n, fill=subscribed)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_text(aes(label=n), vjust=0.4,hjust=0.1, color="black",
+            position = position_dodge(0.9), size=2.7, fontface="bold")+
+  scale_fill_brewer(palette="Pastel1")+
+  theme_grey()+labs(title = "Job to subscribed a term deposit")+ coord_flip()+ theme(legend.position="top")
+```
+```{r , message=F, warning=F, echo=F}
+y<-yes %>% 
+  select(marital, y) %>%  
+  group_by(marital) %>% 
+  summarise(n = n())
+
+n<-no %>% 
+  select(marital, y) %>%  
+  group_by(marital) %>% 
+  summarise(n = n())
+
+
+No<-cbind(n,subscribed=rep("No",12))
+Yes<-cbind(y,subscribed=rep("Yes",12))
+marital<-rbind(No,Yes)
+
+
+b<-ggplot(data=marital, aes(x=marital, y=n, fill=subscribed)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_text(aes(label=n), vjust=0.4,hjust=1, color="black",
+            position = position_dodge(0.9), size=2.7, fontface="bold")+
+  scale_fill_brewer(palette="Pastel1")+
+  theme_grey()+labs(title = "marital to subscribed a term deposit")+ coord_flip()+ theme(legend.position="none")
+```
+
+
+```{r , message=F, warning=F, echo=F}
+y<-yes %>% 
+  select(education, y) %>%  
+  group_by(education) %>% 
+  summarise(n = n())
+
+n<-no %>% 
+  select(education, y) %>%  
+  group_by(education) %>% 
+  summarise(n = n())
+
+
+No<-cbind(n,subscribed=rep("No",12))
+Yes<-cbind(y,subscribed=rep("Yes",12))
+education<-rbind(No,Yes)
+
+
+c<-ggplot(data=education, aes(x=education, y=n, fill=subscribed)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_text(aes(label=n), vjust=0.4,hjust=0.2, color="black",
+            position = position_dodge(0.9), size=2.7, fontface="bold")+
+  scale_fill_brewer(palette="Pastel1")+
+  theme_grey()+labs(title = "education to subscribed a term deposit")+ coord_flip()+ theme(legend.position="none")
+```
+
+
+```{r , message=F, warning=F, echo=F}
+y<-yes %>% 
+  select(default, y) %>%  
+  group_by(default) %>% 
+  summarise(n = n())
+
+n<-no %>% 
+  select(default, y) %>%  
+  group_by(default) %>% 
+  summarise(n = n())
+
+
+No<-cbind(n,subscribed=rep("No",12))
+Yes<-cbind(y,subscribed=rep("Yes",12))
+default<-rbind(No,Yes)
+
+
+d<-ggplot(data=default, aes(x=default, y=n, fill=subscribed)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_text(aes(label=n), vjust=0.4,hjust=1, color="black",
+            position = position_dodge(0.9), size=2.7, fontface="bold")+
+  scale_fill_brewer(palette="Pastel1")+
+  theme_grey()+labs(title = "default to subscribed a term deposit")+ coord_flip()+ theme(legend.position="none")
+```
+
+```{r , message=F, warning=F, echo=F}
+y<-yes %>% 
+  select(housing, y) %>%  
+  group_by(housing) %>% 
+  summarise(n = n())
+
+n<-no %>% 
+  select(housing, y) %>%  
+  group_by(housing) %>% 
+  summarise(n = n())
+
+
+No<-cbind(n,subscribed=rep("No",12))
+Yes<-cbind(y,subscribed=rep("Yes",12))
+housing<-rbind(No,Yes)
+
+
+e<-ggplot(data=housing, aes(x=housing, y=n, fill=subscribed)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_text(aes(label=n), vjust=0.4,hjust=1.1, color="white",
+            position = position_dodge(0.9), size=2.7, fontface="bold")+
+  scale_fill_brewer(palette="Set1")+
+  theme_grey()+labs(title = "housing to subscribed a term deposit")+ coord_flip()+ theme(legend.position="top")
+```
+```{r, message=F, warning=F, echo=F}
+y<-yes %>% 
+  select(loan, y) %>%  
+  group_by(loan) %>% 
+  summarise(n = n())
+
+n<-no %>% 
+  select(loan, y) %>%  
+  group_by(loan) %>% 
+  summarise(n = n())
+
+
+No<-cbind(n,subscribed=rep("No",12))
+Yes<-cbind(y,subscribed=rep("Yes",12))
+loan<-rbind(No,Yes)
+
+
+f<-ggplot(data=loan, aes(x=loan, y=n, fill=subscribed)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_text(aes(label=n), vjust=0.4,hjust=0.4, color="black",
+            position = position_dodge(0.9), size=2.7, fontface="bold")+
+  scale_fill_brewer(palette="Set1")+
+  theme_grey()+labs(title = "loan to subscribed a term deposit")+ coord_flip()+ theme(legend.position="none")
+```
+
+```{r, message=F, warning=F, echo=F}
+y<-yes %>% 
+  select(contact, y) %>%  
+  group_by(contact) %>% 
+  summarise(n = n())
+
+n<-no %>% 
+  select(contact, y) %>%  
+  group_by(contact) %>% 
+  summarise(n = n())
+
+
+No<-cbind(n,subscribed=rep("No",12))
+Yes<-cbind(y,subscribed=rep("Yes",12))
+contact<-rbind(No,Yes)
+
+
+g<-ggplot(data=contact, aes(x=contact, y=n, fill=subscribed)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_text(aes(label=n), vjust=0.4,hjust=0.2, color="black",
+            position = position_dodge(0.9), size=2.7, fontface="bold")+
+  scale_fill_brewer(palette="Set1")+
+  theme_grey()+labs(title = "contact to subscribed a term deposit")+ coord_flip()+ theme(legend.position="none")
+```
+```{r, message=F, warning=F, echo=F}
+y<-yes %>% 
+  select(poutcome, y) %>%  
+  group_by(poutcome) %>% 
+  summarise(n = n())
+
+n<-no %>% 
+  select(poutcome, y) %>%  
+  group_by(poutcome) %>% 
+  summarise(n = n())
+
+
+No<-cbind(n,subscribed=rep("No",12))
+Yes<-cbind(y,subscribed=rep("Yes",12))
+poutcome<-rbind(No,Yes)
+
+
+h<-ggplot(data=poutcome, aes(x=poutcome, y=n, fill=subscribed)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_text(aes(label=n), vjust=0.4,hjust=0.2, color="black",
+            position = position_dodge(0.9), size=2.7, fontface="bold")+
+  scale_fill_brewer(palette="Set1")+
+  theme_grey()+labs(title = "poutcome to subscribed a term deposit")+ coord_flip()+ theme(legend.position="none")
+```
+
+```{r, message=F, warning=F, echo=F}
+library(ggpubr)
+ggarrange(a,b,c,d,nrow=2,ncol=2)
+ggarrange(e,f,g,h,nrow=2,ncol=2)
+
+```
+
+
+
+
+
+```{r, echo=F}
+chis <- lapply(bank[,c(2:5,7:9,16)], function(x) chisq.test(bank[,c(17)],x,simulate.p.value=TRUE))
+do.call(rbind, chis)[,c(1,3)]
+```
+
+- As seen all p-values are smaller than the significance level of 0.05, so there is significant relationship between categorical variables and y.
+
+
+## MODELING
+
+### Data Preparation
+
+We see that in EDA part, in response variable, "no" class proportion is 88.3 while "yes" class proportion is 11.7. There is huge difference difference between two class. Thus, we have imbalance data and it causes reduction in accuracy of ML algorithms.
+
+What are the methods to deal with imbalanced data sets ?
+
+The methods are widely known as ‘Sampling Methods’. Generally, these methods aim to modify an imbalanced data into balanced distribution using some mechanism. The modification occurs by altering the size of original data set and provide the same proportion of balance.
+
+
+
+Below are the methods used to treat imbalanced datasets:
+
+
+
+- Undersampling
+- Oversampling
+- Synthetic Data Generation
+- Cost Sensitive Learning
+
+
+```{r, message=F, warning=F, echo=F, output=F}
+library(kableExtra)
+bank<- read.csv(file = "bank-full.csv", head = T, sep=";")
+```
+
+
+```{r, message=F, warning=F, echo=F, output=F}
+bank$job<-as.factor(bank$job)
+bank$marital<-as.factor(bank$marital)
+bank$education<-as.factor(bank$education)
+bank$default<-as.factor(bank$default)
+bank$housing<-as.factor(bank$housing)
+
+bank$loan<-as.factor(bank$loan)
+bank$contact<-as.factor(bank$contact)
+bank$poutcome<-as.factor(bank$poutcome)
+#bank$ y<-as.factor(bank$ y)
+```
+
+```{r, message=F, warning=F, echo=F, output=F}
+for(i in 1: nrow(bank)){
+  if(bank$y[i]=="yes"){
+    bank$y[i]=1
+  }
+  else{
+   bank$y[i]=0 
+  }
+}
+
+bank$y<-as.factor(bank$y)
+```
+
+
+- I applied the both undersampling and oversampling since you we’ve lost significant information from the sample when doing undersampling. 
+- In this case, the minority class is oversampled with replacement and majority class is undersampled without replacement.
+
+```{r, message=F, warning=F, echo=F}
+library(ROSE)
+data_balanced_both <- ovun.sample(y ~ ., data = bank, method = "both", p=0.5, N=45211, seed = 1)$data
+```
+
+
+After under and oversampling number of response class be:
+
+```{r, message=F, warning=F, echo=F}
+table(data_balanced_both$y)
+prop.table(table(data_balanced_both$y))
+```
+
+
+```{r, message=F, warning=F, include=F, echo=F}
+inst_pack_func <- function(list.of.packages){
+  new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+  if(length(new.packages)) install.packages(new.packages)
+  lapply(list.of.packages,function(x){library(x,character.only=TRUE)})
+}
+
+list.of.packages <- c("ggplot2","dplyr","stats4","splines","VGAM","rsample","rpart","rpart.plot","ipred","caret","rattle","RColorBrewer","xgboost")
+inst_pack_func(list.of.packages)
+```
+
+
+- After over and undersampling data divided into two part; training and test set.
+- 80% of the data used as training set and 20% of the data used as test set.
+
+
+
+```{r, message=F, warning=F, echo=F}
+set.seed(123)
+split <- initial_split(data_balanced_both, prop = .8)
+train1 <- training(split)
+test  <- testing(split)
+nrow(train1)
+nrow(test)
+```
+
+
+```{r, message=F, warning=F, echo=F}
+prop.table(table(train1$y))
+```
+
+- In all of models, y taken as response variable (by taking 0:No, 1:Yes), all of the other variables taking as covariate.
+
+#### LOGISTIC REGRESSION
+
+```{r, message=F, warning=F, echo=F}
+regression<- glm(y~., data = train1, family  = binomial(link = "logit"))
+summary(regression)
+```
+
+```{r, message=F, warning=F, echo=F}
+test$y<-as.factor(test$y)
+```
+
+
+```{r, message=F, warning=F, echo=F}
+#Construct the Confusion Matrix
+prediction <- predict(regression, newdata = test, type = 'response')
+pred <- factor(ifelse(prediction <= 0.5,0,1))
+result <- caret::confusionMatrix(pred,test$y)
+result
+```
+
+```{r, message=F, warning=F, echo=F}
+metrics<-as.data.frame(result$byClass)
+colnames(metrics)<-"metrics"
+round(metrics,4)
+```
+
+
+
+#### DECISION TREE
+
+```{r, message=F, warning=F, echo=F}
+ensemble <- rpart(y~., data = train1, method = 'class')
+rpart.plot(ensemble)
+```
+
+
+```{r, message=F, warning=F, echo=F}
+#Construct the Confusion Matrix
+prediction2 <- predict(ensemble, newdata = test, type = 'class')
+
+result2 <- caret::confusionMatrix(prediction2,test$y)
+result2
+```
+
+
+```{r, message=F, warning=F, echo=F}
+metrics<-as.data.frame(result2$byClass)
+colnames(metrics)<-"metrics"
+round(metrics,4)
+```
+
+
+
+
+#### XGBOOST
+
+
+```{r, message=F, warning=F, echo=F, output=F}
+bank<- read.csv(file = "bank-full.csv", head = T, sep=";")
+```
+
+
+```{r, message=F, warning=F, echo=F, output=F}
+bank$job<-as.factor(bank$job)
+bank$marital<-as.factor(bank$marital)
+bank$education<-as.factor(bank$education)
+bank$default<-as.factor(bank$default)
+bank$housing<-as.factor(bank$housing)
+
+bank$loan<-as.factor(bank$loan)
+bank$contact<-as.factor(bank$contact)
+bank$poutcome<-as.factor(bank$poutcome)
+#bank$ y<-as.factor(bank$ y)
+```
+
+```{r, message=F, warning=F, echo=F, output=F}
+for(i in 1: nrow(bank)){
+  if(bank$y[i]=="yes"){
+    bank$y[i]=1
+  }
+  else{
+   bank$y[i]=0 
+  }
+}
+
+bank$y<-as.factor(bank$y)
+```
+
+```{r, message=F, warning=F, echo=F}
+indexes = createDataPartition(bank$y, p=.8, list=F)
+train = bank[indexes, ]
+test = bank[-indexes, ]
+
+train_x = data.matrix(train[,-17])
+train_y = train[,17]
+ 
+test_x = data.matrix(test[,-17])
+test_y = test[,17]
+
+
+xgb_train = xgb.DMatrix(data=train_x, label=train_y)
+xgb_test = xgb.DMatrix(data=test_x, label=test_y)
+
+xgbc = xgboost(data=xgb_train, max.depth=3, nrounds=50)
+```
+
+```{r, message=F, warning=F, echo=F}
+pred = predict(xgbc, xgb_test)
+pred[(pred>3)] = 3
+pred_y = as.factor((levels(test_y))[round(pred)])
+cm = confusionMatrix(test_y, pred_y)
+print(cm)
+```
+
+```{r, message=F, warning=F, echo=F}
+metrics<-as.data.frame(cm$byClass)
+colnames(metrics)<-"metrics"
+round(metrics,4)
+```
+
+
+#### Model Selection
+
+```{r, echo=F}
+f1<-c(0.836,0.82,0.798)
+modelss<-c("Logistic Regression", "Decision tree","XGBOOST")
+v1=data.frame(f1,modelss)
+ggplot(v1, aes(x=modelss, y=f1)) + 
+  geom_bar(stat = "identity",fill="gold")+coord_flip()+ggtitle("Accuracy")+geom_text(aes(label = f1), vjust = 0, hjust = 1.2) +labs(x="models",y="Accuracy")
+```
+
+```{r, echo=F}
+f1<-c(0.839,0.806,0.949)
+modelss<-c("Logistic Regression", "Decision tree","XGBOOST")
+v1=data.frame(f1,modelss)
+ggplot(v1, aes(x=modelss, y=f1)) + 
+  geom_bar(stat = "identity",fill="gold")+coord_flip()+ggtitle("F1 Score")+geom_text(aes(label = f1), vjust = 0, hjust = 1.2) +labs(x="models",y="F1 Score")
+```
+
+```{r, echo=F}
+f1<-c(0.85,0.747,0.923)
+modelss<-c("Logistic Regression", "Decision tree","XGBOOST")
+v1=data.frame(f1,modelss)
+ggplot(v1, aes(x=modelss, y=f1)) + 
+  geom_bar(stat = "identity",fill="gold")+coord_flip()+ggtitle("Recall")+geom_text(aes(label = f1), vjust = 0, hjust = 1.2) +labs(x="models",y="Recall")
+```
+
+
+```{r, echo=F}
+f1<-c(0.825,0.876,0.975)
+modelss<-c("Logistic Regression", "Decision tree","XGBOOST")
+v1=data.frame(f1,modelss)
+ggplot(v1, aes(x=modelss, y=f1)) + 
+  geom_bar(stat = "identity",fill="gold")+coord_flip()+ggtitle("Precision")+geom_text(aes(label = f1), vjust = 0, hjust = 1.2) +labs(x="models",y="Precision")
+```
+
+- As seen from the plots, F1 score, recall and precision of the model conducted with XGBOOST is the highest.
+
+- Thus, F1 score, recall and precision suggest that XGBOOST model is better model among 3 models.
+
+
+
+
+
+
+
